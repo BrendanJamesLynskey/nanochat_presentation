@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Best ChatGPT $100 Can Buy — Karpathy's nanochat Explained</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/black.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/monokai.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ==================== TITLE ==================== -->
+<section>
+    <h1 class="gradient-text">The Best ChatGPT<br>$100 Can Buy</h1>
+    <p class="subtitle">An end-to-end walkthrough of Andrej Karpathy's<br><em>nanochat</em> — the full ChatGPT pipeline in one repo</p>
+    <div class="meta-info">
+        <span>~8,300 lines of code</span> · <span>one 8×H100 node</span> · <span>~$100 · ~4 hours</span>
+    </div>
+    <p class="nav-hint">Use <kbd>→</kbd> to advance · <kbd>↓</kbd> for sub-sections · <kbd>Esc</kbd> for overview</p>
+</section>
+
+<!-- ==================== ROADMAP ==================== -->
+<section>
+    <h2>The Pipeline</h2>
+    <div class="roadmap" id="roadmap">
+        <div class="roadmap-item active" data-step="1">
+            <div class="roadmap-icon">🔤</div>
+            <div class="roadmap-label">Tokeniser</div>
+        </div>
+        <div class="roadmap-arrow">→</div>
+        <div class="roadmap-item" data-step="2">
+            <div class="roadmap-icon">📚</div>
+            <div class="roadmap-label">Pretraining</div>
+        </div>
+        <div class="roadmap-arrow">→</div>
+        <div class="roadmap-item" data-step="3">
+            <div class="roadmap-icon">💬</div>
+            <div class="roadmap-label">Midtrain &amp; SFT</div>
+        </div>
+        <div class="roadmap-arrow">→</div>
+        <div class="roadmap-item" data-step="4">
+            <div class="roadmap-icon">🏆</div>
+            <div class="roadmap-label">Optional RL</div>
+        </div>
+        <div class="roadmap-arrow">→</div>
+        <div class="roadmap-item" data-step="5">
+            <div class="roadmap-icon">📊</div>
+            <div class="roadmap-label">Eval</div>
+        </div>
+        <div class="roadmap-arrow">→</div>
+        <div class="roadmap-item" data-step="6">
+            <div class="roadmap-icon">🚀</div>
+            <div class="roadmap-label">Serve</div>
+        </div>
+    </div>
+    <div class="explain-box small">
+        <p>nanochat is the sequel to <strong>nanoGPT</strong>. Where nanoGPT covered only <em>pretraining</em>, nanochat is a single, cohesive, hackable codebase covering the <strong>whole</strong> ChatGPT pipeline — and stitches it together with one script: <code>speedrun.sh</code>.</p>
+    </div>
+</section>
+
+<!-- ==================== PART 1: WHAT IS NANOCHAT ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 1</h2>
+    <h1 class="gradient-text">What is nanochat?</h1>
+    <p>One repo, the entire ChatGPT pipeline, ~$100</p>
+</section>
+
+<section>
+    <h3>"The best ChatGPT that $100 can buy"</h3>
+    <div class="explain-box">
+        <p><strong>The pitch:</strong> boot a single 8×H100 GPU node, run one script, and ~4 hours later you have a small ChatGPT clone you can talk to in a web UI. At ~$24/hr for the node, that is roughly <strong>$100</strong>.</p>
+        <p><strong>The point:</strong> not to compete with frontier models, but to make the <em>entire</em> stack — tokeniser to served chat model — legible, minimal, and forkable in one place.</p>
+    </div>
+    <div class="interactive-demo" id="pipeline-demo">
+        <label>Click a stage to see what it does and its rough slice of the speedrun:</label>
+        <div class="pipeline" id="pipeline">
+            <div class="pipe-stage active"><div class="pipe-icon">🔤</div><div class="pipe-name">Tokeniser</div><div class="pipe-cost">~1 min</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">📚</div><div class="pipe-name">Pretrain</div><div class="pipe-cost">~3 hrs</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">💬</div><div class="pipe-name">Midtrain</div><div class="pipe-cost">~8 min</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">🎯</div><div class="pipe-name">SFT</div><div class="pipe-cost">~7 min</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">🏆</div><div class="pipe-name">RL</div><div class="pipe-cost">opt.</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">📊</div><div class="pipe-name">Eval</div><div class="pipe-cost">secs</div></div>
+            <div class="pipe-stage"><div class="pipe-icon">🚀</div><div class="pipe-name">Serve</div><div class="pipe-cost">live</div></div>
+        </div>
+        <div class="pipe-detail" id="pipe-detail"></div>
+    </div>
+</section>
+
+<section>
+    <h3>nanoGPT → nanochat</h3>
+    <div class="contrast-cols">
+        <div class="contrast-card nano1">
+            <h4>nanoGPT</h4>
+            <ul>
+                <li>Pretraining only</li>
+                <li>Trains a base language model</li>
+                <li>Character / BPE tokens, fixed</li>
+                <li>No chat format, no serving</li>
+                <li>The "from scratch" teaching repo</li>
+            </ul>
+        </div>
+        <div class="contrast-card nano2">
+            <h4>nanochat</h4>
+            <ul>
+                <li>The <strong>whole</strong> pipeline, end to end</li>
+                <li>Tokeniser → pretrain → mid → SFT → RL</li>
+                <li>Eval suite + a markdown report card</li>
+                <li>KV-cached engine + ChatGPT-style web UI</li>
+                <li>One <code>speedrun.sh</code>, ~$100, ~4 hours</li>
+            </ul>
+        </div>
+    </div>
+    <div class="explain-box small">
+        <p>Karpathy: the name "derives from my earlier project nanoGPT, which only covered pretraining." nanochat is the capstone that wraps everything around it.</p>
+    </div>
+</section>
+
+<section>
+    <h3>One Script to Rule Them All</h3>
+    <pre><code class="language-bash"># The entire pipeline lives in a single file:
+bash runs/speedrun.sh
+
+# It is designed for a blank 8XH100 node and takes ~3-4 hours.
+# Then talk to your freshly-trained model in the browser:
+python -m scripts.chat_web</code></pre>
+    <div class="explain-box">
+        <p><strong>The "report card":</strong> as it runs, nanochat writes markdown sections into a single <code>report.md</code> — system info, tokeniser stats, base CORE score, and the chat eval suite — so the whole run summarises itself into one scorecard you can read at a glance.</p>
+    </div>
+</section>
+</section>
+
+<!-- ==================== PART 2: TOKENISER ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 2</h2>
+    <h1 class="gradient-text">The Tokeniser</h1>
+    <p>A custom, fast BPE tokeniser trained on the data</p>
+</section>
+
+<section>
+    <h3>Train Your Own BPE</h3>
+    <pre><code class="language-bash"># Download ~2B characters of pretraining text (≈8 shards)
+python -m nanochat.dataset -n 8
+
+# Train a byte-level BPE tokeniser on that text
+python -m scripts.tok_train      # vocab default 2**15 = 32,768
+
+# Evaluate it (compression ratio vs. references)
+python -m scripts.tok_eval</code></pre>
+    <div class="explain-box">
+        <p><strong>Why a custom tokeniser?</strong> A BPE vocabulary trained on the <em>same</em> distribution it will model compresses that text more efficiently — fewer tokens per document means more learning per FLOP. nanochat trains its own rather than borrowing GPT-2's.</p>
+    </div>
+</section>
+
+<section>
+    <h3>Fast by Design — a Rust BPE</h3>
+    <div class="two-col">
+        <div class="col">
+            <div class="explain-box">
+                <p><strong>Rust implementation:</strong> training a BPE over ~2B characters is heavy, so nanochat wraps a fast Rust BPE trainer (<code>RustBPETokenizer</code>), in the style of GPT-4's tokeniser, rather than a slow pure-Python loop.</p>
+                <p><strong>Vocabulary size:</strong> a power of two — <code>2¹⁵ = 32,768</code> on current master (the original $100 d20 run used <code>2¹⁶ = 65,536</code>).</p>
+            </div>
+        </div>
+        <div class="col">
+            <div class="stat-row">
+                <div class="stat"><span class="stat-num">32,768</span><span class="stat-label">vocab (2¹⁵)</span></div>
+                <div class="stat"><span class="stat-num">~2B</span><span class="stat-label">chars trained on</span></div>
+            </div>
+            <div class="text-sample" id="tok-sample">
+                <div class="text-sample-header">nanochat/tokenizer.py</div>
+                <div class="text-sample-body">RustBPETokenizer
+  .train_from_iterator(text_iter, vocab_size)
+
+# bits-per-byte loss is reported so the
+# metric stays invariant to vocab size</div>
+            </div>
+        </div>
+    </div>
+</section>
+</section>
+
+<!-- ==================== PART 3: BASE PRETRAINING ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 3</h2>
+    <h1 class="gradient-text">Base Pretraining</h1>
+    <p>Training the transformer — one dial: <code>--depth</code></p>
+</section>
+
+<section>
+    <h3>The Depth Dial</h3>
+    <pre><code class="language-bash"># Pretrain the base model across 8 GPUs.
+# --depth is the ONE complexity dial you set.
+torchrun --standalone --nproc_per_node=8 \
+    -m scripts.base_train -- --depth=20 --run=$WANDB_RUN
+
+# GPT-2 grade capability sits around depth 24-26.</code></pre>
+    <div class="explain-box">
+        <p><strong>One integer sets everything.</strong> From <code>--depth</code> alone, nanochat computes the width, number of heads, learning-rate schedule, training horizon and weight decay — automatically, in a compute-optimal way. You ask for a bigger or smaller model; you don't hand-tune a wall of hyperparameters.</p>
+        <p>Sweeping depth (d12, d16, d20, d24, d26) gives the nanochat "miniseries" of compute-optimal models. The $100 speedrun is a <strong>d20</strong>.</p>
+    </div>
+</section>
+
+<section>
+    <h3>Architecture Choices</h3>
+    <div class="param-grid">
+        <div class="param-card" title="Click to learn more" onclick="this.classList.toggle('flipped')">
+            <div class="param-front"><strong>Rotary embeddings</strong><br>no learned pos.</div>
+            <div class="param-back">Positions come from RoPE applied to Q and K — no separate position-embedding table</div>
+        </div>
+        <div class="param-card" title="Click to learn more" onclick="this.classList.toggle('flipped')">
+            <div class="param-front"><strong>RMSNorm</strong><br>no learned params</div>
+            <div class="param-back">Parameter-free RMS normalisation in place of LayerNorm — simpler and stable</div>
+        </div>
+        <div class="param-card" title="Click to learn more" onclick="this.classList.toggle('flipped')">
+            <div class="param-front"><strong>ReLU² MLP</strong><br>squared ReLU</div>
+            <div class="param-back">The MLP activation is relu(x)², a strong modern choice over plain ReLU/GELU</div>
+        </div>
+        <div class="param-card" title="Click to learn more" onclick="this.classList.toggle('flipped')">
+            <div class="param-front"><strong>GQA · untied</strong><br>efficient infer.</div>
+            <div class="param-back">Group-Query Attention for cheaper KV cache; token embedding and lm_head are untied</div>
+        </div>
+    </div>
+    <div class="explain-box small">
+        <p>The optimiser is a mixed <strong>Muon + AdamW</strong>: matrix parameters go through Muon, embeddings and scalars through AdamW. Precision is managed explicitly via a single <code>COMPUTE_DTYPE</code> (bf16 on H100), not <code>autocast</code>.</p>
+    </div>
+</section>
+
+<section>
+    <h3>The CORE Metric</h3>
+    <div class="explain-box">
+        <p><strong>How do we know the base model is any good?</strong> nanochat reports the <strong>DCLM CORE score</strong> — an aggregate over many standard language-understanding tasks — plus <code>val_bpb</code> (validation loss in vocab-invariant <em>bits per byte</em>).</p>
+    </div>
+    <div class="comparison-table">
+        <table>
+            <thead>
+                <tr><th>Model</th><th>CORE score</th><th>Note</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>$100 d20 base</td><td>~0.22</td><td>the speedrun base model</td></tr>
+                <tr><td>OpenAI GPT-2</td><td>0.2565</td><td>the bar to beat</td></tr>
+                <tr><td>nanochat d24–d26</td><td>&gt; 0.2565</td><td>"time-to-GPT-2" leaderboard</td></tr>
+            </tbody>
+        </table>
+        <p class="table-note">The public leaderboard races the wall-clock time to push CORE above GPT-2's 0.2565 on an 8×H100 node — currently down to under ~1.7 hours.</p>
+    </div>
+</section>
+</section>
+
+<!-- ==================== PART 4: MIDTRAINING & SFT ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 4</h2>
+    <h1 class="gradient-text">Midtraining &amp; SFT</h1>
+    <p>Turning a text predictor into a chat assistant</p>
+</section>
+
+<section>
+    <h3>The Chat Format</h3>
+    <p style="font-size:0.5em; color:var(--text-muted);">Midtraining first teaches the model the <em>structure</em> of a conversation via special tokens:</p>
+    <div class="chatfmt">
+<span class="sp-tok">&lt;|user_start|&gt;</span> Why is the sky blue? <span class="sp-tok">&lt;|user_end|&gt;</span>
+<span class="sp-tok">&lt;|assistant_start|&gt;</span> Sunlight scatters off air molecules,
+and shorter (blue) wavelengths scatter most&hellip;
+<span class="tool-tok">&lt;|python_start|&gt;</span> print(2 + 2) <span class="tool-tok">&lt;|python_end|&gt;</span>
+<span class="sp-tok">&lt;|assistant_end|&gt;</span>
+    </div>
+    <div class="explain-box small">
+        <p>The <span style="color:#ce93d8;">purple</span> tokens delimit turns; the <span style="color:var(--accent3);">green</span> tokens let the model call a Python interpreter as a tool. These are learned during midtraining, not bolted on at inference time.</p>
+    </div>
+</section>
+
+<section>
+    <h3>Midtraining → SFT</h3>
+    <pre><code class="language-bash"># Midtraining: adapt the base model to conversations,
+# multiple-choice (MMLU-style) and Python tool use.
+torchrun --standalone --nproc_per_node=8 -m scripts.mid_train
+
+# SFT: supervised fine-tuning on curated conversations
+torchrun --standalone --nproc_per_node=8 -m scripts.chat_sft
+torchrun --standalone --nproc_per_node=8 -m scripts.chat_eval -- -i sft</code></pre>
+    <div class="explain-box">
+        <p><strong>Midtraining</strong> (~8 min) is broad and cheap: it mixes conversational data, multiple-choice questions, and tool-use traces so the model learns the chat <em>format</em>. <strong>SFT</strong> (~7 min) then refines on higher-quality conversations (e.g. HuggingFace's SmolTalk) with proper sequence padding, sharpening response quality.</p>
+    </div>
+</section>
+
+<section>
+    <h3>The Chat Eval Suite → Report Card</h3>
+    <div class="report-card">
+        <div class="report-card-header">report.md — chat model (d20, after SFT)</div>
+        <table>
+            <tr><td>ARC-Easy</td><td>0.39</td></tr>
+            <tr><td>ARC-Challenge</td><td>0.28</td></tr>
+            <tr><td>MMLU</td><td>0.31</td></tr>
+            <tr><td>GSM8K</td><td>0.05</td></tr>
+            <tr><td>HumanEval</td><td>0.09</td></tr>
+            <tr class="rc-emph"><td>ChatCORE</td><td>0.09</td></tr>
+        </table>
+    </div>
+    <div class="explain-box small">
+        <p>Figures are approximate, from Karpathy's original $100 d20 example run. The suite spans science (<strong>ARC</strong>), broad knowledge (<strong>MMLU</strong>), grade-school maths (<strong>GSM8K</strong>) and simple Python (<strong>HumanEval</strong>). Modest — this is a "kindergartener" — but the <em>whole</em> assistant pipeline ran end to end.</p>
+    </div>
+</section>
+</section>
+
+<!-- ==================== PART 5: OPTIONAL RL ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 5</h2>
+    <h1 class="gradient-text">Optional RL</h1>
+    <p>Squeezing out more on a verifiable task</p>
+</section>
+
+<section>
+    <h3>RL on GSM8K via "GRPO"</h3>
+    <pre><code class="language-bash"># Reinforcement learning on grade-school maths,
+# where answers can be checked automatically.
+torchrun --standalone --nproc_per_node=8 \
+    -m scripts.chat_rl -- --run=$WANDB_RUN</code></pre>
+    <div class="explain-box">
+        <p><strong>Why GSM8K?</strong> Maths answers are <em>verifiable</em> — you can score a rollout as right or wrong with no human or reward model. That makes it the natural target for RL in a minimal repo.</p>
+        <p><strong>"GRPO" (in quotes):</strong> nanochat's variant samples a group of answers per question and uses the reward <em>minus the group mean</em> as the advantage — dropping the z-score division (no σ normalisation) of textbook GRPO. Simpler, and it works here.</p>
+    </div>
+</section>
+
+<section>
+    <h3>What RL Adds Beyond SFT</h3>
+    <div class="explain-box">
+        <p><strong>SFT imitates</strong> demonstrations; <strong>RL optimises an outcome.</strong> Instead of copying a reference answer, the model explores its own solution paths and is rewarded for ones that reach the correct result — directly improving the metric it is graded on.</p>
+        <p>It is the <em>optional</em> final squeeze: not part of the core ~$100 chat pipeline, and it adds significant wall-clock time (~1.5 hours), but it demonstrates the last rung of the modern post-training ladder inside the same tiny codebase.</p>
+    </div>
+</section>
+</section>
+
+<!-- ==================== PART 6: SERVE & SPEEDRUN ==================== -->
+<section>
+<section>
+    <h2 class="section-title">Part 6</h2>
+    <h1 class="gradient-text">Serve &amp; the Speedrun</h1>
+    <p>Talk to it — and scale the dollar budget</p>
+</section>
+
+<section>
+    <h3>A ChatGPT-Style Web UI</h3>
+    <pre><code class="language-bash"># Serve your model in a familiar chat web app
+python -m scripts.chat_web
+#  → visit http://&lt;node-ip&gt;:8000/
+
+# ...or talk to it on the command line
+python -m scripts.chat_cli -p "Why is the sky blue?"</code></pre>
+    <div class="explain-box">
+        <p><strong>Engine + UI:</strong> <code>nanochat/engine.py</code> provides efficient inference with a <strong>KV cache</strong>; <code>scripts/chat_web.py</code> serves a minimal HTML/CSS/JS chat front-end. The model you trained four hours ago is now a chatbot in your browser — ask it for a poem, or watch it confidently hallucinate who you are.</p>
+    </div>
+</section>
+
+<section>
+    <h3>Scaling the Budget</h3>
+    <div class="interactive-demo" id="tier-demo">
+        <label>Pick a budget tier to see the qualitative difference in the report card:</label>
+        <div class="tier-controls" id="tier-controls">
+            <button class="tier-btn active" data-tier="100">~$100 · d20</button>
+            <button class="tier-btn" data-tier="300">~$300 · d26</button>
+            <button class="tier-btn" data-tier="1000">~$1000</button>
+        </div>
+        <div class="tier-panel" id="tier-panel"></div>
+    </div>
+</section>
+
+<section>
+    <h3>How speedrun.sh Stitches It Together</h3>
+    <pre><code class="language-bash">python -m nanochat.report reset       # start the report card
+python -m nanochat.dataset -n 8        # download text for the tokeniser
+python -m scripts.tok_train            # train the BPE tokeniser
+torchrun ... -m scripts.base_train     # pretrain the base model
+torchrun ... -m scripts.base_eval      # CORE / bpb / samples
+torchrun ... -m scripts.chat_sft       # midtrain + SFT to a chat model
+torchrun ... -m scripts.chat_eval      # ARC / MMLU / GSM8K / HumanEval
+python -m nanochat.report generate     # assemble the final report.md</code></pre>
+    <div class="explain-box small">
+        <p>Every stage writes a section to the report; the last command assembles them. Boot a node, run one line, come back to a trained, evaluated, serveable ChatGPT clone — and a scorecard.</p>
+    </div>
+</section>
+</section>
+
+<!-- ==================== SUMMARY ==================== -->
+<section>
+<section>
+    <h2 class="gradient-text">Pipeline Summary</h2>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <h4>Tokeniser</h4>
+            <ul>
+                <li>Custom byte-level BPE</li>
+                <li>Fast Rust trainer</li>
+                <li>Vocab 2¹⁵ / 2¹⁶</li>
+                <li>Trained on ~2B chars</li>
+            </ul>
+        </div>
+        <div class="summary-card">
+            <h4>Pretraining</h4>
+            <ul>
+                <li>One dial: <code>--depth</code></li>
+                <li>RoPE · RMSNorm · ReLU²</li>
+                <li>GQA · Muon + AdamW</li>
+                <li>Scored by CORE</li>
+            </ul>
+        </div>
+        <div class="summary-card">
+            <h4>Post-training</h4>
+            <ul>
+                <li>Midtrain: chat + tools</li>
+                <li>SFT on conversations</li>
+                <li>Optional RL on GSM8K</li>
+                <li>ARC · MMLU · HumanEval</li>
+            </ul>
+        </div>
+        <div class="summary-card">
+            <h4>Serve</h4>
+            <ul>
+                <li>KV-cached engine</li>
+                <li>ChatGPT-style web UI</li>
+                <li>CLI chat too</li>
+                <li>One <code>speedrun.sh</code></li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>Where This Fits in Zero-to-Hero</h2>
+    <div class="explain-box">
+        <p>Karpathy's <strong>Neural Networks: Zero to Hero</strong> builds the fundamentals from scratch — micrograd, makemore, and <strong>nanoGPT</strong> (the from-scratch GPT, pretraining only).</p>
+        <p><strong>nanochat is the capstone.</strong> Once you understand how a transformer is built and pretrained, nanochat shows the <em>rest</em> of the modern pipeline — tokeniser, midtraining, SFT, RL, eval and serving — assembled into one ChatGPT you can actually talk to. Fundamentals first; the full system last.</p>
+    </div>
+    <div class="comparison-table">
+        <table>
+            <thead>
+                <tr><th></th><th>nanoGPT</th><th>nanochat</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Scope</td><td>Pretraining</td><td>Whole pipeline</td></tr>
+                <tr><td>Output</td><td>Base LM</td><td>Chat assistant</td></tr>
+                <tr><td>Tokeniser</td><td>Fixed / external</td><td>Trained from scratch</td></tr>
+                <tr><td>Serving</td><td>—</td><td>Web UI + CLI</td></tr>
+                <tr><td>Role</td><td>Fundamentals</td><td>Capstone</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section>
+    <h2>Key Takeaways</h2>
+    <div class="takeaways">
+        <div class="takeaway">
+            <span class="takeaway-num">1</span>
+            <p><strong>The whole pipeline is graspable.</strong> Tokeniser → pretrain → midtrain → SFT → RL → eval → serve fits in one ~8,300-line, dependency-light, hackable repo you can read end to end.</p>
+        </div>
+        <div class="takeaway">
+            <span class="takeaway-num">2</span>
+            <p><strong>One dial, compute-optimal.</strong> Set <code>--depth</code> and everything else — width, heads, learning rate, horizon — is derived automatically. Ask for a bigger model, not a bigger config file.</p>
+        </div>
+        <div class="takeaway">
+            <span class="takeaway-num">3</span>
+            <p><strong>$100 buys the system, not the scale.</strong> The d20 speedrun is a "kindergartener", but it is a <em>complete</em> ChatGPT. Turn the budget up (d26 ≈ GPT-2) and the same code keeps climbing the report card.</p>
+        </div>
+    </div>
+    <div class="credits">
+        <p>Based on Andrej Karpathy's <a href="https://github.com/karpathy/nanochat" target="_blank">nanochat</a> (released October 2025)</p>
+        <p>Code &amp; report card: <a href="https://github.com/karpathy/nanochat" target="_blank">github.com/karpathy/nanochat</a></p>
+    </div>
+</section>
+</section>
+
+</div><!-- /slides -->
+</div><!-- /reveal -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="interactive.js"></script>
+<script>
+Reveal.initialize({
+    hash: true,
+    slideNumber: true,
+    transition: 'slide',
+    backgroundTransition: 'fade',
+    plugins: [ RevealHighlight ],
+    width: 1200,
+    height: 700,
+    margin: 0.04,
+});
+</script>
+</body>
+</html>
